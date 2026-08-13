@@ -6,7 +6,7 @@
 
 # ================== КОНФИГУРАЦИЯ ==================
 # Секреты загружаются из конфиг-файла (не коммитить!)
-CONFIG_FILE="${SCRIPT_DIR}/telegram.conf"
+CONFIG_FILE="${SCRIPT_DIR}telegram.conf"
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Ошибка: файл $CONFIG_FILE не найден"
