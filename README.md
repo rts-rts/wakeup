@@ -8,6 +8,7 @@
 wakeup/
 ├── computers.conf        — список хостов
 ├── wakeup_monitor.sh     — главный скрипт
+├── telegram.conf         — хранится токен бота и ID чата Telegram
 ├── telegram_sender.sh    — отправка сообщений в Telegram
 ├── wakeup-monitor.service — systemd unit
 ├── wakeup-monitor.timer  — systemd timer (каждые 10 минут)
