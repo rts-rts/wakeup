@@ -1,0 +1,8 @@
+# Копируй в telegram.conf и заполни свои значения
+# НЕ коммичь telegram.conf в git!
+
+# Получить токен у @BotFather в Telegram
+BOT_TOKEN="YOUR_BOT_TOKEN_HERE"
+
+# ID твоего чата или канала
+CHAT_ID="YOUR_CHAT_ID_HERE"
