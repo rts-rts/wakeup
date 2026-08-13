@@ -8,8 +8,8 @@
 wakeup/
 ├── computers.conf        — список хостов
 ├── wakeup_monitor.sh     — главный скрипт
-├── telegram.conf         — хранится токен бота и ID чата Telegram
 ├── telegram_sender.sh    — отправка сообщений в Telegram
+├── telegram.conf         — хранится токен бота и ID чата Telegram
 ├── wakeup-monitor.service — systemd unit
 ├── wakeup-monitor.timer  — systemd timer (каждые 10 минут)
 └── state/                — создаётся автоматически
@@ -92,7 +92,7 @@ rm -f /home/user/wakeup/state/*.notified
 
 ## Настройка Telegram
 
-Токен бота и Chat ID хранятся в начале `telegram_sender.sh`:
+Токен бота и Chat ID хранятся в начале `telegram.conf`:
 
 ```bash
 BOT_TOKEN="..."
