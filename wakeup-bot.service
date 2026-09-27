@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Путь к uv проверить на сервере: which uv
+# Путь к uv — от пользователя User=: which uv
 User=user
 ExecStart=/home/user/.local/bin/uv run --project /home/user/wakeup python bot.py
 WorkingDirectory=/home/user/wakeup

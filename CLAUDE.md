@@ -32,6 +32,8 @@ wakeup/
 - **5 попыток × 60с** — и для кнопки, и для auto
 - **SCRIPT_DIR** — пути относительно `bot.py`, чтобы systemd мог запускать из любого CWD
 - **uv** — для зависимостей (`uv sync`, `uv run`)
+- **Отдельный токен бота** — на сервере работает `telegram-bot.service` (`/home/user/telegram_bot`, мониторинг сервера) со своим ботом; общий токен даёт `Conflict` в getUpdates
+- **Сервис от `User=user`** — root не нужен (ping и wakeonlan работают от пользователя), uv установлен в `/home/user/.local/bin/uv`
 
 ## Поведение при изменениях
 
@@ -44,6 +46,8 @@ wakeup/
 
 - Сообщения в HTML parse_mode; имена/IP экранируются `html.escape`
 - Команды: `/status` (`/start`); callback_data: `wake:<name>`, `refresh`
+- Privacy mode включён: в группе бот получает только команды, не обычный текст
+- CHAT_ID группы `WakeUp_MASOMI_1` — отрицательный; при преобразовании в супергруппу меняется на `-100…`
 
 ## Типичные задачи
 

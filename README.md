@@ -31,17 +31,22 @@ wakeup/
 
 ## Установка
 
-1. Создать бота у @BotFather, токен записать в `telegram.conf` (пример — `telegram.conf.example`).
+1. Создать **отдельного** бота у @BotFather (`/newbot`), токен записать в `telegram.conf` (пример — `telegram.conf.example`).
+   Токен нельзя использовать в другом работающем боте (например, `telegram-bot.service` мониторинга сервера): по одному токену сообщения может получать только один процесс, иначе ошибка `Conflict: terminated by other getUpdates request`.
 2. Создать **группу** (не канал: в канале подписчики не могут нажимать кнопки и писать команды), добавить в неё бота.
-3. Написать в группе любое сообщение, затем `./telegram_sender.sh --get-updates` — `chat_id` группы (отрицательное число) записать в `CHAT_ID`.
-   Если бот не видит сообщения, отправьте в группе `/start@имя_бота` или отключите privacy mode у @BotFather.
+3. Узнать ID группы (отрицательное число) и записать в `CHAT_ID`. Любой из способов:
+   - отправить в группе `/start@имя_бота` (бот в группе видит только команды — обычный текст ему не приходит), затем `./telegram_sender.sh --get-updates` и взять `chat_id` записи с нужным `chat_title`. Работает, только пока бот не запущен;
+   - открыть группу в https://web.telegram.org/k/ — ID стоит в адресе после `#`, вместе с минусом.
+
+   Если группу преобразуют в супергруппу (это делают некоторые настройки группы), её ID меняется на `-100…` — узнать заново.
 4. Установить зависимости:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh   # если uv нет
    sudo apt install wakeonlan
    uv sync
    ```
-5. Проверить путь к uv (`which uv`) в `ExecStart` файла `wakeup-bot.service`, затем:
+5. Проверить вручную: `uv run python bot.py`, в группе `/status` → список с кнопками. Остановить Ctrl+C.
+6. Проверить в `wakeup-bot.service` пользователя (`User=`) и путь к uv (`which uv` от этого пользователя) в `ExecStart`, затем:
    ```bash
    sudo cp wakeup-bot.service /etc/systemd/system/
    sudo systemctl daemon-reload
