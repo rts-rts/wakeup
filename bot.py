@@ -3,12 +3,14 @@
 import asyncio
 import html
 import logging
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -46,6 +48,9 @@ def load_telegram_conf(path: Path = TELEGRAM_CONF) -> tuple[str, int]:
             continue
         key, value = line.split("=", 1)
         values[key.strip()] = value.strip().strip("\"'")
+    missing = [k for k in ("BOT_TOKEN", "CHAT_ID") if not values.get(k)]
+    if missing:
+        raise ValueError(f"в {path} не заданы: {', '.join(missing)}")
     return values["BOT_TOKEN"], int(values["CHAT_ID"])
 
 
@@ -71,7 +76,7 @@ def find_host(name: str) -> Host | None:
 
 async def ping(ip: str) -> bool:
     proc = await asyncio.create_subprocess_exec(
-        "ping", "-c", "3", "-W", "2", ip,
+        "ping", "-c", "2", "-W", "1", ip,
         stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
     )
     return await proc.wait() == 0
@@ -153,8 +158,8 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if host.name in waking:
             await query.answer(f"{host.name} уже включается")
             return
+        waking.add(host.name)  # до первого await, иначе двойное нажатие пройдёт проверку
         await query.answer(f"Включаю {host.name}…")
-        waking.add(host.name)
         user = query.from_user
         who = f"@{user.username}" if user.username else user.full_name
         log.info("[%s] Wake requested by %s (%s)", host.name, who, user.id)
@@ -171,8 +176,9 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text, markup = await render_status(waking)
     try:
         await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
-    except Exception as e:  # "message is not modified" и т.п.
-        log.debug("edit_message_text failed: %s", e)
+    except BadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise
 
 
 async def manual_wake(host: Host, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -240,12 +246,24 @@ async def auto_check(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # ================== MAIN ==================
 
+def check_setup() -> None:
+    """Падаем сразу с понятной ошибкой, а не при первом нажатии кнопки."""
+    problems = [f"нет файла {p}" for p in (TELEGRAM_CONF, CONF_FILE) if not p.exists()]
+    problems += [f"не найдена программа {p}" for p in (WAKEONLAN, "ping") if shutil.which(p) is None]
+    if problems:
+        raise SystemExit("Ошибка запуска: " + "; ".join(problems))
+
+
 def main() -> None:
     logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    check_setup()
     STATE_DIR.mkdir(exist_ok=True)
 
-    token, chat_id = load_telegram_conf()
+    try:
+        token, chat_id = load_telegram_conf()
+    except ValueError as e:
+        raise SystemExit(f"Ошибка запуска: {e}")
     app = Application.builder().token(token).build()
     app.bot_data["chat_id"] = chat_id
     app.bot_data["waking"] = set()

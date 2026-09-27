@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from bot import Host, load_hosts, load_telegram_conf
@@ -27,3 +29,10 @@ def test_load_telegram_conf(tmp_path):
     conf = tmp_path / "telegram.conf"
     conf.write_text('# comment\nBOT_TOKEN="123:abc"\nCHAT_ID="-1001234567890"\n')
     assert load_telegram_conf(conf) == ("123:abc", -1001234567890)
+
+
+def test_load_telegram_conf_missing_key(tmp_path):
+    conf = tmp_path / "telegram.conf"
+    conf.write_text('BOT_TOKEN="123:abc"\nCHAT_ID=""\n')
+    with pytest.raises(ValueError, match="CHAT_ID"):
+        load_telegram_conf(conf)
