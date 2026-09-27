@@ -135,7 +135,8 @@ async def render_status(waking: set[str]) -> tuple[str, InlineKeyboardMarkup]:
 
 async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text, markup = await render_status(context.bot_data["waking"])
-    await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+    await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup,
+                                              do_quote=False)
 
 
 # ================== Кнопки ==================
