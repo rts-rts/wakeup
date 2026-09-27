@@ -1,0 +1,16 @@
+[project]
+name = "wakeup-bot"
+version = "0.1.0"
+description = "Telegram-бот для просмотра состояния и включения компьютеров через Wake-on-LAN"
+requires-python = ">=3.11"
+dependencies = [
+    "python-telegram-bot[job-queue]>=22",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[tool.uv]
+package = false

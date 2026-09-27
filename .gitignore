@@ -1,3 +1,5 @@
 .claude/
 telegram.conf
 
+.venv/
+__pycache__/

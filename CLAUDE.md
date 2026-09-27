@@ -1,52 +1,56 @@
-# CLAUDE.md — Wake-on-LAN Monitor
+# CLAUDE.md — Wake-on-LAN Telegram Bot
 
 ## Что это
 
-Bash-сервис мониторинга доступности компьютеров в локальной сети с автоматическим пробуждением через Wake-on-LAN и уведомлениями в Telegram.
+Python-бот в Telegram-группе: показывает доступность компьютеров в локальной сети и включает их по кнопке через Wake-on-LAN. Хосты с флагом `auto` бот будит сам.
 
 ## Структура
 
 ```
 wakeup/
-├── computers.conf         — список хостов (name ip mac, пробел/таб)
-├── wakeup_monitor.sh      — главный скрипт мониторинга
-├── telegram_sender.sh     — отправка в Telegram через Bot API
-├── wakeup-monitor.service — /etc/systemd/system/ (oneshot)
-├── wakeup-monitor.timer   — /etc/systemd/system/ (каждые 10 минут)
-└── state/                 — runtime-директория, создаётся скриптом
-    └── <name>.notified    — маркер "уже уведомлено", избегает спама
+├── bot.py                 — бот (python-telegram-bot v22, long polling, JobQueue)
+├── pyproject.toml, uv.lock — зависимости, управляются uv
+├── computers.conf         — список хостов (name ip mac [auto], пробел/таб)
+├── telegram.conf          — BOT_TOKEN, CHAT_ID (id группы); не в git
+├── telegram_sender.sh     — отдельная CLI-утилита отправки; бот её не использует
+├── wakeup-bot.service     — /etc/systemd/system/ (Type=simple, Restart=always)
+├── tests/test_config.py   — pytest на парсинг конфигов
+└── state/                 — runtime-директория, создаётся ботом
+    └── <name>.notified    — маркер "auto-хост недоступен, уже уведомлено"
 ```
 
-Лог: `/var/log/wakeup_monitor.log` (ротация: обрезается до 1000 строк при превышении 2000)
+Лог: stdout → journald (`journalctl -u wakeup-bot`)
 
 ## Ключевые решения и причины
 
-- **wakeonlan** (не ethtool) — именно этот инструмент отправляет magic packet; установлен в `/usr/bin/wakeonlan`
-- **State-файлы** вместо БД — простейший способ помнить состояние между запусками systemd oneshot
-- **5 попыток × 60с** — цикл внутри одного запуска скрипта, не между запусками таймера
-- **Telegram через telegram_sender.sh -m "..."** — вызов существующего скрипта, не прямой curl
-- **SCRIPT_DIR** — все пути относительно расположения скрипта, чтобы systemd мог запускать из любого CWD
+- **Группа, а не канал** — в канале подписчики не могут писать команды и жать кнопки
+- **Доступ = членство в группе** — handlers фильтруются по `CHAT_ID`, в личке бот молчит
+- **Один процесс вместо timer+oneshot** — периодическая проверка auto-хостов через `JobQueue.run_repeating`
+- **Бот шлёт сообщения сам** (python-telegram-bot), а не через `telegram_sender.sh`
+- **wakeonlan** (не ethtool) — `/usr/bin/wakeonlan`
+- **State-файлы** — помнят "уже уведомлено" между перезапусками
+- **5 попыток × 60с** — и для кнопки, и для auto
+- **SCRIPT_DIR** — пути относительно `bot.py`, чтобы systemd мог запускать из любого CWD
+- **uv** — для зависимостей (`uv sync`, `uv run`)
 
 ## Поведение при изменениях
 
-- `computers.conf` — читается при каждом запуске, перезапуск сервиса не нужен
-- Systemd units — после изменения: `sudo systemctl daemon-reload`
-- Параметры (`MAX_ATTEMPTS`, `WAIT_BETWEEN`) — в начале `wakeup_monitor.sh`
+- `computers.conf` — читается при каждой команде/проверке, перезапуск не нужен
+- `bot.py`, `telegram.conf` — `sudo systemctl restart wakeup-bot`
+- Systemd unit — после изменения: `sudo systemctl daemon-reload`
+- Параметры (`MAX_ATTEMPTS`, `WAIT_BETWEEN`, `CHECK_INTERVAL`) — в начале `bot.py`
 
 ## Telegram
 
-- Токен и Chat ID захардкожены в `telegram_sender.sh` (BOT_TOKEN, CHAT_ID)
-- Сообщения в HTML parse_mode — можно использовать `<b>`, `<code>`, `<i>`
-- Многострочные сообщения работают (проверено `send_system_notification` в telegram_sender.sh)
+- Сообщения в HTML parse_mode; имена/IP экранируются `html.escape`
+- Команды: `/status` (`/start`); callback_data: `wake:<name>`, `refresh`
 
 ## Типичные задачи
 
-**Добавить хост:** вписать строку в `computers.conf`
+**Добавить хост:** вписать строку в `computers.conf` (с `auto`, если будить автоматически)
 
-**Хост постоянно offline и уведомления надоели:** `rm state/<name>.notified`
+**Хост постоянно offline и уведомления надоели:** убрать `auto` или `rm state/<name>.notified` для повторной попытки
 
-**Изменить интервал таймера:** отредактировать `OnCalendar` в `wakeup-monitor.timer`, затем `sudo systemctl daemon-reload`
+**Тесты:** `uv run pytest`
 
-**Изменить количество попыток WoL:** `MAX_ATTEMPTS=5` в начале `wakeup_monitor.sh`
-
-**Проверить статус:** `systemctl list-timers wakeup-monitor.timer` и `cat /var/log/wakeup_monitor.log`
+**Проверить статус:** `systemctl status wakeup-bot` и `journalctl -u wakeup-bot`

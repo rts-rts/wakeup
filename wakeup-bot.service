@@ -1,0 +1,15 @@
+[Unit]
+Description=Wake-on-LAN Telegram bot: host status and on-demand wake-up
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Путь к uv проверить на сервере: which uv
+ExecStart=/usr/local/bin/uv run --project /home/user/wakeup python bot.py
+WorkingDirectory=/home/user/wakeup
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

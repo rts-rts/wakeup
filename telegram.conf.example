@@ -4,5 +4,5 @@
 # Получить токен у @BotFather в Telegram
 BOT_TOKEN="YOUR_BOT_TOKEN_HERE"
 
-# ID твоего чата или канала
+# ID группы, в которой работает бот (отрицательное число)
 CHAT_ID="YOUR_CHAT_ID_HERE"

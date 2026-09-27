@@ -1,121 +1,111 @@
-# Wake-on-LAN Monitor
+# Wake-on-LAN Telegram Bot
 
-Сервис периодически пингует список компьютеров. Если компьютер недоступен — отправляет WoL-пакет, повторяет до 5 раз с интервалом 1 минута, затем шлёт уведомление в Telegram.
+Telegram-бот в закрытой группе: участники смотрят, какие компьютеры включены, и включают нужный кнопкой (Wake-on-LAN). Держать все компьютеры постоянно включёнными не нужно.
+
+Хосты с флагом `auto` бот проверяет каждые 10 минут и будит сам (как раньше делал `wakeup_monitor.sh`).
 
 ## Файлы
 
 ```
 wakeup/
+├── bot.py                — бот (python-telegram-bot, long polling)
+├── pyproject.toml        — зависимости (uv)
 ├── computers.conf        — список хостов
-├── wakeup_monitor.sh     — главный скрипт
-├── telegram_sender.sh    — отправка сообщений в Telegram
-├── telegram.conf         — хранится токен бота и ID чата Telegram
-├── wakeup-monitor.service — systemd unit
-├── wakeup-monitor.timer  — systemd timer (каждые 10 минут)
+├── telegram.conf         — токен бота и ID группы (не в git)
+├── telegram_sender.sh    — отдельная утилита отправки сообщений (бот её не использует)
+├── wakeup-bot.service    — systemd unit
+├── tests/                — pytest
 └── state/                — создаётся автоматически
-    └── <name>.notified   — маркер "уведомление уже отправлено"
+    └── <name>.notified   — маркер "auto-хост недоступен, уведомление отправлено"
 ```
 
-Лог: `/var/log/wakeup_monitor.log`
+Лог: `journalctl -u wakeup-bot`
+
+## Как пользоваться в Telegram
+
+- `/status` — список компьютеров: 🟢 включён, 🔴 выключен, ⏳ включается
+- Кнопка **🔌 Включить NAME** — отправляет WoL, до 5 попыток с интервалом 1 минута; итог бот пишет в группу вместе с именем того, кто нажал
+- Кнопка **🔄 Обновить** — перепроверить состояние
+
+Бот отвечает только в группе с `CHAT_ID` из `telegram.conf`. В личке и чужих группах он молчит. Доступ = членство в группе.
+
+## Установка
+
+1. Создать бота у @BotFather, токен записать в `telegram.conf` (пример — `telegram.conf.example`).
+2. Создать **группу** (не канал: в канале подписчики не могут нажимать кнопки и писать команды), добавить в неё бота.
+3. Написать в группе любое сообщение, затем `./telegram_sender.sh --get-updates` — `chat_id` группы (отрицательное число) записать в `CHAT_ID`.
+   Если бот не видит сообщения, отправьте в группе `/start@имя_бота` или отключите privacy mode у @BotFather.
+4. Установить зависимости:
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh   # если uv нет
+   sudo apt install wakeonlan
+   uv sync
+   ```
+5. Проверить путь к uv (`which uv`) в `ExecStart` файла `wakeup-bot.service`, затем:
+   ```bash
+   sudo cp wakeup-bot.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now wakeup-bot
+   ```
+
+### Переход со старой версии
+
+```bash
+sudo systemctl disable --now wakeup-monitor.timer
+sudo rm /etc/systemd/system/wakeup-monitor.{service,timer}
+sudo systemctl daemon-reload
+```
 
 ## Управление хостами
 
 Файл `computers.conf` — по одной строке на хост, поля разделяются пробелами или табуляцией:
 
 ```
-# name         ip               mac
+# name         ip               mac                 [auto]
 ARTMAG01       192.168.10.100   18:c0:4d:08:e9:af
-SYS            192.168.10.81    d8:bb:c1:07:06:aa
+SYS            192.168.10.81    d8:bb:c1:07:06:aa   auto
 ```
 
-- Строки начинающиеся с `#` и пустые строки игнорируются
-- MAC нужен для Wake-on-LAN; посмотреть на целевом компьютере: `ip link` или `arp -n <ip>`
-- После изменения файла перезапускать сервис не нужно — читается при каждом запуске
+- Строки, начинающиеся с `#`, и пустые строки игнорируются
+- `auto` — бот сам будит хост, если он выключен; без флага — только по кнопке
+- MAC посмотреть на целевом компьютере: `ip link` или `arp -n <ip>`
+- Файл читается при каждой команде — перезапуск бота не нужен
 
-## Как работает логика
+## Логика auto-хостов
 
 ```
-Каждые 10 минут для каждого хоста:
+Каждые 10 минут для каждого хоста с флагом auto:
 
   ping OK?
   ├── ДА + был помечен как недоступный → уведомление "вернулся", снять пометку
   └── НЕТ + уже помечен              → пропустить (не спамить)
-      НЕТ + не помечен               → WoL-цикл:
-          Попытка 1: wakeonlan <mac> → ждать 60с → ping?
-          Попытка 2: ...
-          ...
-          Попытка 5: если всё ещё нет → уведомление в Telegram + пометить хост
+      НЕТ + не помечен               → WoL-цикл (5 × 60с):
+          успех → уведомление "пробужден"
+          нет   → уведомление "недоступен" + пометить хост
 ```
+
+Сбросить пометку: `rm state/<name>.notified`
 
 ## Управление сервисом
 
 ```bash
-# Статус таймера (когда следующий запуск)
-systemctl list-timers wakeup-monitor.timer
-
-# Ручной запуск
-sudo systemctl start wakeup-monitor.service
-
-# Лог последнего запуска
-journalctl -u wakeup-monitor.service
-
-# Остановить/выключить
-sudo systemctl stop wakeup-monitor.timer
-sudo systemctl disable wakeup-monitor.timer
-
-# Включить снова
-sudo systemctl enable --now wakeup-monitor.timer
+systemctl status wakeup-bot
+journalctl -u wakeup-bot -f
+sudo systemctl restart wakeup-bot
 ```
 
-## Просмотр лога
+## Разработка
 
 ```bash
-# Последние записи
-tail -f /var/log/wakeup_monitor.log
-
-# Всё с начала
-cat /var/log/wakeup_monitor.log
+uv run pytest            # тесты
+uv run python bot.py     # запуск вручную
 ```
 
-## Состояние хостов
-
-```bash
-# Посмотреть кто сейчас помечен как "недоступен и уведомлён"
-ls /home/user/wakeup/state/
-
-# Вручную сбросить пометку (например, после ремонта)
-rm /home/user/wakeup/state/ARTMAG01.notified
-
-# Сбросить все пометки
-rm -f /home/user/wakeup/state/*.notified
-```
-
-## Настройка Telegram
-
-Токен бота и Chat ID хранятся в начале `telegram.conf`:
-
-```bash
-BOT_TOKEN="..."
-CHAT_ID="..."
-```
-
-Получить Chat ID: запустить `./telegram_sender.sh --get-updates` после того как написать боту любое сообщение.
-
-## Тест WoL вручную
-
-```bash
-# Проверить доступность
-ping -c 3 192.168.10.100
-
-# Отправить WoL-пакет напрямую
-wakeonlan 18:c0:4d:08:e9:af
-
-# Тест Telegram
-./telegram_sender.sh -m "Тест"
-```
+Параметры (`MAX_ATTEMPTS`, `WAIT_BETWEEN`, `CHECK_INTERVAL`) — в начале `bot.py`.
 
 ## Требования
 
+- Python ≥ 3.11, `uv`
 - `wakeonlan` — `sudo apt install wakeonlan`
-- `curl`, `jq` — нужны для `telegram_sender.sh`
+- `curl`, `jq` — только для `telegram_sender.sh`
 - Компьютеры должны поддерживать Wake-on-LAN и быть настроены в BIOS/UEFI
