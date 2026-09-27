@@ -6,7 +6,8 @@
 
 # ================== КОНФИГУРАЦИЯ ==================
 # Секреты загружаются из конфиг-файла (не коммитить!)
-CONFIG_FILE="${SCRIPT_DIR}telegram.conf"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/telegram.conf"
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Ошибка: файл $CONFIG_FILE не найден"
@@ -15,9 +16,9 @@ fi
 
 source "$CONFIG_FILE"
 
-# Проверка загрузки
-if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
-    echo "Ошибка: BOT_TOKEN или CHAT_ID не установлены в $CONFIG_FILE"
+# Проверка загрузки (CHAT_ID проверяется в check_config — для --get-updates он не нужен)
+if [ -z "$BOT_TOKEN" ]; then
+    echo "Ошибка: BOT_TOKEN не установлен в $CONFIG_FILE"
     exit 1
 fi
 
@@ -164,7 +165,15 @@ send_with_buttons() {
 get_updates() {
     echo "Получение последних обновлений..."
     local response=$(curl -s "${TELEGRAM_API}/getUpdates")
-    echo "$response" | jq '.result[] | {message: .message.text, chat_id: .message.chat.id, chat_title: .message.chat.title}'
+    if [ "$(echo "$response" | jq -r '.ok')" != "true" ]; then
+        echo "❌ Ошибка Telegram: $(echo "$response" | jq -r '.description // .')"
+        return 1
+    fi
+    if [ "$(echo "$response" | jq '.result | length')" = "0" ]; then
+        echo "Обновлений нет. Напишите в группе /start@имя_бота и повторите."
+        return 0
+    fi
+    echo "$response" | jq '.result[] | (.message // .my_chat_member // .channel_post) | select(. != null) | {text: .text, chat_id: .chat.id, chat_title: .chat.title}'
 }
 
 # Функция проверки конфигурации
@@ -175,7 +184,7 @@ check_config() {
         exit 1
     fi
     
-    if [ "$CHAT_ID" = "YOUR_CHAT_ID_HERE" ]; then
+    if [ -z "$CHAT_ID" ] || [ "$CHAT_ID" = "YOUR_CHAT_ID_HERE" ]; then
         echo "❌ Ошибка: Необходимо указать ID чата (CHAT_ID)"
         echo "Используйте команду: $0 --get-updates"
         exit 1
