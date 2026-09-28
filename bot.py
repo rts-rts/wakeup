@@ -55,11 +55,11 @@ def load_telegram_conf(path: Path = TELEGRAM_CONF) -> tuple[str, int]:
 
 
 def load_hosts(path: Path = CONF_FILE) -> list[Host]:
-    """Формат строки: name ip mac [auto]. # и пустые строки игнорируются."""
+    """Формат строки: name ip mac [auto]. Всё после # и пустые строки игнорируются."""
     hosts = []
     for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+        line = line.split("#", 1)[0].strip()
+        if not line:
             continue
         parts = line.split()
         if len(parts) < 3:
@@ -183,13 +183,16 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def manual_wake(host: Host, context: ContextTypes.DEFAULT_TYPE) -> None:
+    name = html.escape(host.name)
     try:
-        ok = await ping(host.ip) or await wake_until_online(host)
+        if await ping(host.ip):
+            text = f"✅ <b>{name}</b> уже в сети"
+        elif await wake_until_online(host):
+            text = f"✅ <b>{name}</b> включился"
+        else:
+            text = f"❌ <b>{name}</b> не включился после {MAX_ATTEMPTS} попыток WoL"
     finally:
         context.bot_data["waking"].discard(host.name)
-    name = html.escape(host.name)
-    text = (f"✅ <b>{name}</b> в сети" if ok
-            else f"❌ <b>{name}</b> не включился после {MAX_ATTEMPTS} попыток WoL")
     await context.bot.send_message(context.bot_data["chat_id"], text, parse_mode=ParseMode.HTML)
 
 
@@ -234,7 +237,9 @@ async def process_auto_host(host: Host, context: ContextTypes.DEFAULT_TYPE) -> N
         chat_id,
         f"❌ <b>Хост недоступен</b>\n\n📍 Имя: <code>{name}</code>\n"
         f"🌐 IP: <code>{ip}</code>\n🔌 MAC: <code>{mac}</code>\n"
-        f"🔁 Попыток WoL: {MAX_ATTEMPTS}\n🕐 Время: {now()}",
+        f"🔁 Попыток WoL: {MAX_ATTEMPTS}\n🕐 Время: {now()}\n\n"
+        f"<i>Автопробуждение приостановлено до возвращения хоста в сеть "
+        f"(или <code>rm state/{name}.notified</code>)</i>",
         parse_mode=ParseMode.HTML,
     )
     marker.touch()

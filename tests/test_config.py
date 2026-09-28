@@ -16,11 +16,15 @@ def test_load_hosts(tmp_path):
         "  PC1 192.168.1.10 AA:BB:CC:DD:EE:FF\n"
         "NAS\t192.168.1.20\tDE:AD:BE:EF:CA:FE\tauto\n"
         "BROKEN 192.168.1.30\n"
+        "SRV 192.168.1.50 AA:AA:AA:AA:AA:AA auto # комментарий\n"
+        "WS 192.168.1.60 BB:BB:BB:BB:BB:BB#без пробела\n"
         "LAST 192.168.1.40 11:22:33:44:55:66"  # без перевода строки в конце
     )
     assert load_hosts(conf) == [
         Host("PC1", "192.168.1.10", "AA:BB:CC:DD:EE:FF", False),
         Host("NAS", "192.168.1.20", "DE:AD:BE:EF:CA:FE", True),
+        Host("SRV", "192.168.1.50", "AA:AA:AA:AA:AA:AA", True),
+        Host("WS", "192.168.1.60", "BB:BB:BB:BB:BB:BB", False),
         Host("LAST", "192.168.1.40", "11:22:33:44:55:66", False),
     ]
 
